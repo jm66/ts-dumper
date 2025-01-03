@@ -12,18 +12,19 @@ from typing import Dict, Optional
 import urllib3
 
 PACKAGE_NAME = "ts-dumper"
-__version__ = "0.0.1-dev0"
+__version__ = "0.0.2-dev0"
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 REQUIREMENTS = [
-    'xmltodict==0.12.0',
-    'requests==2.27.1',
-    'click==8.0.3',
-    'click-log==0.3.2',
-    'lxml==4.7.1',
-    'rich==11.1.0',
+    'xmltodict==0.14.2',
+    'requests==2.32.3',
+    'click==8.1.8',
+    'click-log==0.4.0',
+    'lxml==5.3.0',
+    'rich==13.9.4',
 ]
+
 try:
     import click
     from lxml import etree
@@ -46,7 +47,7 @@ except ImportError:
         process = Popen(args, stdin=PIPE, stdout=PIPE, stderr=PIPE, env=env)
         _, stderr = process.communicate()
         if process.returncode != 0:
-            print(f'Error trying to install requirement {package}')
+            print(f'Error trying to install requirement {package}: {stderr}')
             sys.exit(1)
     print(f'Successfully installed: {", ".join(REQUIREMENTS)}.')
     print(f'Please, execute the script again.')
@@ -122,7 +123,7 @@ def get_collection_from_name(name, headers) -> Optional[Dict]:
     type=click.STRING,
     required=True,
     help='Collection name',
-    default=25046,
+    default='Cadmania',
 )
 @click.option(
     '--username',
@@ -140,6 +141,7 @@ def get_collection_from_name(name, headers) -> Optional[Dict]:
 @click.option(
     '--target-dir',
     type=click.Path(),
+    required=True,
     help='Target directory where files will be written.',
 )
 @click.option(
@@ -211,6 +213,7 @@ def cli(
             )
             doc_dict = rv.json()
             pages = doc_dict['pageList']['pages']
+            # _LOGGER.info([len(p['tsList']['transcripts']) for p in pages])
             _LOGGER.debug(
                 f'DocId={doc_id} title={doc_title} found pages={len(pages)}'
             )
@@ -232,8 +235,10 @@ def cli(
                     transcripts = page['tsList']['transcripts']
                     image_file_name = page["imgFileName"]
                     text_file_name = f'{Path(image_file_name).stem}.txt'
+                    meta_file_name = f'{Path(image_file_name).stem}-meta.txt'
                     text_file_path = base_path.joinpath(text_file_name)
-                    _LOGGER.debug(f'{image_file_name} -> {len(transcripts)}')
+                    meta_file_path = base_path.joinpath(meta_file_name)
+                    _LOGGER.debug(f'{image_file_name} + {meta_file_path}-> {len(transcripts)}')
                     max_ts = max([t['timestamp'] for t in transcripts])
                     max_ts_dt = datetime.datetime.fromtimestamp(max_ts / 1e3)
                     _LOGGER.debug(f'Getting ts {max_ts_dt}')
@@ -259,6 +264,13 @@ def cli(
                         f'with {len(text)} characters.'
                     )
                     text_file_path.write_text(text)
+                    if latest:
+                        meta = [
+                            f'status:\t{latest[0].get("status", "N/A")}',
+                            f'userName:\t{latest[0].get("userName", "N/A")}',
+                            f'nrOfLines:\t{latest[0].get("nrOfLines", 0)}'
+                        ]
+                        meta_file_path.write_text('\n'.join(meta))
                 except Exception as ex:
                     cprint(
                         f'[bold red]Error[/bold red] '
